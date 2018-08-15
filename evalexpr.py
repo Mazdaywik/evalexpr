@@ -20,10 +20,14 @@ def main(argv):
 class ID:
     def __init__(self, name):
         self.name = name
+    def __repr__(self):
+        return "ID(" + repr(self.name) + ")"
 
 class Number:
     def __init__(self, val):
         self.val = val
+    def __repr__(self):
+        return "Number(" + repr(self.name) + ")"
 
 class SyntaxError(Exception):
     def __init__(self, filename, row, col, message):
@@ -47,7 +51,7 @@ class Lexer:
             self.__variable()
         elif self.__ch().isdigit():
             self.__number()
-        elif self.__ch() in ['+', '-', '*', '/', '(', ')']:
+        elif self.__ch() in ['+', '-', '*', '/', '(', ')', '=']:
             self.token = self.__ch()
             self.__nextch()
         elif self.__ch() == "":
@@ -135,9 +139,19 @@ def parse_term(code, lexer):
         parse_factor(code, lexer)
         code.append(sign)
 
-# factor = ID | NUMBER | '(' expr ')'
+# factor = ID ['=' expr] | NUMBER | '(' expr ')'
 def parse_factor(code, lexer):
-    if type(lexer.token) in [ID, Number]:
+    if type(lexer.token) == ID:
+        varname = lexer.token.name
+        lexer.next_token()
+        if lexer.token == '=':
+            lexer.next_token()
+            code.append(LValue(varname))
+            parse_expr(code, lexer)
+            code.append('=')
+        else:
+            code.append(ID(varname))
+    elif type(lexer.token) == Number:
         code.append(lexer.token)
         lexer.next_token()
     elif lexer.token == '(':
@@ -148,6 +162,12 @@ def parse_factor(code, lexer):
         lexer.error("Expected number, varname or '('")
 
 ## Виртуальная машина
+
+class LValue:
+    def __init__(self, name):
+        self.name = name
+    def __repr__(self):
+        return "LValue(" + repr(self.name) + ")"
 
 BINARY = {
     '+' : lambda x, y : x + y,
@@ -172,8 +192,17 @@ def evaluate(code):
             stack.append(BINARY[cur](x, y))
         elif cur == "NEG":
             stack.append(-stack.pop())
+        elif type(cur) == LValue:
+            stack.append(cur.name)
+        elif cur == '=':
+            value = stack.pop()
+            varname = stack.pop()
+            env[varname] = value
+            stack.append(value)
+        else:
+            raise Exception("Bad instruction '{cur}'".format(**locals()))
         pc += 1
-    print(stack.pop())
+    print(stack)
 
 if __name__ == "__main__":
     #main(sys.argv)
