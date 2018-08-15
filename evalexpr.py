@@ -87,6 +87,8 @@ class Lexer:
         if self.token != token:
             self.error("Expected {token}, but got {self.token}"
                        .format(**locals()))
+        else:
+            self.next_token()
 
     def __ch(self):
         return self.__text[:1]
