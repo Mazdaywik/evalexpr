@@ -1,3 +1,4 @@
 Radius = 10;
 S = pi * Radius * Radius;
-S
+print(S);
+print(sin(pi/6))

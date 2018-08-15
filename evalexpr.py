@@ -51,7 +51,7 @@ class Lexer:
             self.__variable()
         elif self.__ch().isdigit():
             self.__number()
-        elif self.__ch() in ['+', '-', '*', '/', '(', ')', '=', ';']:
+        elif self.__ch() in ['+', '-', '*', '/', '(', ')', '=', ';', ',']:
             self.token = self.__ch()
             self.__nextch()
         elif self.__ch() == "":
@@ -147,18 +147,12 @@ def parse_term(code, lexer):
         parse_factor(code, lexer)
         code.append(sign)
 
-# factor = ID ['=' expr] | NUMBER | '(' exprlist ')'
+# factor = primary {args} | NUMBER | '(' exprlist ')'
 def parse_factor(code, lexer):
     if type(lexer.token) == ID:
-        varname = lexer.token.name
-        lexer.next_token()
-        if lexer.token == '=':
-            lexer.next_token()
-            code.append(LValue(varname))
-            parse_expr(code, lexer)
-            code.append('=')
-        else:
-            code.append(ID(varname))
+        parse_primary(code, lexer)
+        while lexer.token == '(':
+            parse_args(code, lexer)
     elif type(lexer.token) == Number:
         code.append(lexer.token)
         lexer.next_token()
@@ -169,6 +163,35 @@ def parse_factor(code, lexer):
     else:
         lexer.error("Expected number, varname or '(', but got "
                     + repr(lexer.token))
+
+# primary = ID ['=' expr]
+def parse_primary(code, lexer):
+    if type(lexer.token) == ID:
+        varname = lexer.token.name
+        lexer.next_token()
+        if lexer.token == '=':
+            lexer.next_token()
+            code.append(LValue(varname))
+            parse_expr(code, lexer)
+            code.append('=')
+        else:
+            code.append(ID(varname))
+    else:
+        lexer.error("Expected varname, but got " + repr(lexer.token))
+
+# args = '(' [expr {',' expr}] ')'
+def parse_args(code, lexer):
+    lexer.expects('(')
+    code.append("[]")
+    if lexer.token != ')':
+        parse_expr(code, lexer)
+        code.append("APPEND")
+        while lexer.token == ',':
+            lexer.next_token()
+            parse_expr(code, lexer)
+            code.append("APPEND")
+    lexer.expects(')')
+    code.append("CALL")
 
 ## Виртуальная машина
 
@@ -183,11 +206,18 @@ BINARY = {
     '-' : lambda x, y : x - y,
     '*' : lambda x, y : x * y,
     '/' : lambda x, y : x / y,
+    "APPEND" : lambda args, arg : args + [arg],
+    "CALL" : lambda func, args : func(*args),
 }
 
 def evaluate(code):
     stack = []
-    env = { "pi" : math.pi, "e" : math.e }
+    env = {
+        "pi" : math.pi,
+        "e" : math.e,
+        "sin" : math.sin,
+        "print" : print
+    }
     pc = 0
     while pc < len(code):
         cur = code[pc]
@@ -195,7 +225,7 @@ def evaluate(code):
             stack.append(cur.val)
         elif type(cur) == ID:
             stack.append(env[cur.name])
-        elif cur in ['+', '-', '*', '/']:
+        elif cur in BINARY:
             y = stack.pop()
             x = stack.pop()
             stack.append(BINARY[cur](x, y))
@@ -210,10 +240,11 @@ def evaluate(code):
             stack.append(value)
         elif cur == "DROP":
             stack.pop()
+        elif cur == "[]":
+            stack.append([])
         else:
             raise Exception("Bad instruction '{cur}'".format(**locals()))
         pc += 1
-    print(stack)
 
 if __name__ == "__main__":
     #main(sys.argv)
