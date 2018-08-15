@@ -34,6 +34,10 @@ class SyntaxError(Exception):
         self.message = "{filename}:{row}:{col}:{message}".format(**locals())
 
 class Lexer:
+    OPS = ['+', '-', '*', '/', '(', ')', '=', ';', ',', '<', '>']
+    OPS2 = ['<=', '>=', '==', '!=']
+    KEYWORDS = ["NONE", "TRUE", "FALSE"]
+
     def __init__(self, filename):
         fin = open(filename, encoding="UTF-8")
         self.__text = fin.read()
@@ -51,7 +55,11 @@ class Lexer:
             self.__variable()
         elif self.__ch().isdigit():
             self.__number()
-        elif self.__ch() in ['+', '-', '*', '/', '(', ')', '=', ';', ',']:
+        elif self.__ch2() in Lexer.OPS2:
+            self.token = self.__ch2()
+            self.__nextch()
+            self.__nextch()
+        elif self.__ch() in Lexer.OPS:
             self.token = self.__ch()
             self.__nextch()
         elif self.__ch() == "":
@@ -64,7 +72,10 @@ class Lexer:
         while self.__ch().isalnum():
             varname += self.__ch()
             self.__nextch()
-        self.token = ID(varname)
+        if varname in Lexer.KEYWORDS:
+            self.token = varname
+        else:
+            self.token = ID(varname)
 
     def __number(self):
         number = ""
@@ -97,6 +108,9 @@ class Lexer:
     def __ch(self):
         return self.__text[:1]
 
+    def __ch2(self):
+        return self.__text[:2]
+
     def __nextch(self):
         if self.__ch() == '\n':
             self.__row += 1
@@ -120,8 +134,18 @@ def parse_exprlist(code, lexer):
         code.append("DROP")
         parse_expr(code, lexer)
 
-# expr = ['+' | '-'] term { ('+' | '-') term }
+RELOP = ["<", "<=", ">", ">=", "==", "!="]
+# expr = arexpr [RELOP arexpr]
 def parse_expr(code, lexer):
+    parse_arexpr(code, lexer)
+    if lexer.token in RELOP:
+        relop = lexer.token
+        lexer.next_token()
+        parse_arexpr(code, lexer)
+        code.append(relop)
+
+# arexpr = ['+' | '-'] term { ('+' | '-') term }
+def parse_arexpr(code, lexer):
     sign = '+'
     if lexer.token in ['+', '-']:
         sign = lexer.token
@@ -149,12 +173,12 @@ def parse_term(code, lexer):
 
 # factor = primary {args} | NUMBER | '(' exprlist ')'
 def parse_factor(code, lexer):
-    if type(lexer.token) == ID:
+    if type(lexer.token) == ID or lexer.token in VALKEYWORD:
         parse_primary(code, lexer)
         while lexer.token == '(':
             parse_args(code, lexer)
     elif type(lexer.token) == Number:
-        code.append(lexer.token)
+        code.append(RValue(lexer.token.val))
         lexer.next_token()
     elif lexer.token == '(':
         lexer.next_token()
@@ -164,7 +188,13 @@ def parse_factor(code, lexer):
         lexer.error("Expected number, varname or '(', but got "
                     + repr(lexer.token))
 
-# primary = ID ['=' expr]
+VALKEYWORD = {
+    "TRUE" : True,
+    "FALSE" : False,
+    "NONE" : None,
+}
+
+# primary = ID ['=' expr] | TRUE | FALSE | NONE
 def parse_primary(code, lexer):
     if type(lexer.token) == ID:
         varname = lexer.token.name
@@ -176,6 +206,9 @@ def parse_primary(code, lexer):
             code.append('=')
         else:
             code.append(ID(varname))
+    elif lexer.token in VALKEYWORD:
+        code.append(RValue(VALKEYWORD[lexer.token]))
+        lexer.next_token()
     else:
         lexer.error("Expected varname, but got " + repr(lexer.token))
 
@@ -201,6 +234,12 @@ class LValue:
     def __repr__(self):
         return "LValue(" + repr(self.name) + ")"
 
+class RValue:
+    def __init__(self, val):
+        self.val = val
+    def __repr__(self):
+        return "RValue(" + repr(self.val) + ")"
+
 BINARY = {
     '+' : lambda x, y : x + y,
     '-' : lambda x, y : x - y,
@@ -208,6 +247,12 @@ BINARY = {
     '/' : lambda x, y : x / y,
     "APPEND" : lambda args, arg : args + [arg],
     "CALL" : lambda func, args : func(*args),
+    '<' : lambda x, y : x < y,
+    '>' : lambda x, y : x > y,
+    "<=" : lambda x, y : x <= y,
+    ">=" : lambda x, y : x >= y,
+    "==" : lambda x, y : x == y,
+    "!=" : lambda x, y : x != y,
 }
 
 def evaluate(code):
@@ -221,7 +266,7 @@ def evaluate(code):
     pc = 0
     while pc < len(code):
         cur = code[pc]
-        if type(cur) == Number:
+        if type(cur) == RValue:
             stack.append(cur.val)
         elif type(cur) == ID:
             stack.append(env[cur.name])

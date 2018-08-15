@@ -1,4 +1,10 @@
 Radius = 10;
 S = pi * Radius * Radius;
 print(S);
-print(sin(pi/6))
+print(sin(pi/6));
+print(1 == 2);
+print(1 < 2);
+print(NONE);
+print(TRUE);
+print(print(FALSE));
+print(print(FALSE) == NONE)
