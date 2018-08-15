@@ -51,7 +51,7 @@ class Lexer:
             self.__variable()
         elif self.__ch().isdigit():
             self.__number()
-        elif self.__ch() in ['+', '-', '*', '/', '(', ')', '=']:
+        elif self.__ch() in ['+', '-', '*', '/', '(', ')', '=', ';']:
             self.token = self.__ch()
             self.__nextch()
         elif self.__ch() == "":
@@ -107,10 +107,18 @@ class Lexer:
 
 ## Синтаксический анализ
 
-# program = expr
+# program = exprlist
 def parse_program(code, lexer):
-    parse_expr(code, lexer)
+    parse_exprlist(code, lexer)
     lexer.expects("EOF")
+
+# exprlist = expr { ';' expr }
+def parse_exprlist(code, lexer):
+    parse_expr(code, lexer)
+    while lexer.token == ';':
+        lexer.next_token()
+        code.append("DROP")
+        parse_expr(code, lexer)
 
 # expr = ['+' | '-'] term { ('+' | '-') term }
 def parse_expr(code, lexer):
@@ -139,7 +147,7 @@ def parse_term(code, lexer):
         parse_factor(code, lexer)
         code.append(sign)
 
-# factor = ID ['=' expr] | NUMBER | '(' expr ')'
+# factor = ID ['=' expr] | NUMBER | '(' exprlist ')'
 def parse_factor(code, lexer):
     if type(lexer.token) == ID:
         varname = lexer.token.name
@@ -156,10 +164,11 @@ def parse_factor(code, lexer):
         lexer.next_token()
     elif lexer.token == '(':
         lexer.next_token()
-        parse_expr(code, lexer)
+        parse_exprlist(code, lexer)
         lexer.expects(')')
     else:
-        lexer.error("Expected number, varname or '('")
+        lexer.error("Expected number, varname or '(', but got "
+                    + repr(lexer.token))
 
 ## Виртуальная машина
 
@@ -199,6 +208,8 @@ def evaluate(code):
             varname = stack.pop()
             env[varname] = value
             stack.append(value)
+        elif cur == "DROP":
+            stack.pop()
         else:
             raise Exception("Bad instruction '{cur}'".format(**locals()))
         pc += 1
