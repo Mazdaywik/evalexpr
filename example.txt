@@ -34,4 +34,17 @@ print(if 1 > 2 then 1 else 2 end);
 print(if 1 < 2 then 3 end);
 print(if 1 > 2 then 4 end);
 
+x = 1;
+y = 10;
+while y > 0 do
+  print(x = x * 2);
+  print(y = y - 1)
+end;
+
+z = 7;
+print(while z do z = z - 1; z + 100 end);
+
+z = 7;
+print(while z > 50 do z = z - 1; z + 100 end);
+
 0

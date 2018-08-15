@@ -36,7 +36,10 @@ class SyntaxError(Exception):
 class Lexer:
     OPS = ['+', '-', '*', '/', '(', ')', '=', ';', ',', '<', '>']
     OPS2 = ['<=', '>=', '==', '!=']
-    KEYWORDS = ["NONE", "TRUE", "FALSE", "if", "then", "else", "end"]
+    KEYWORDS = ["NONE", "TRUE", "FALSE",
+                "if", "then", "else", "end",
+                "while", "do",
+                ]
 
     def __init__(self, filename):
         fin = open(filename, encoding="UTF-8")
@@ -193,7 +196,7 @@ def start_primary(token):
             or token in VALKEYWORD
             or token in STATKEYWORD)
 
-STATKEYWORD = ['if']
+STATKEYWORD = ['if', "while"]
 
 VALKEYWORD = {
     "TRUE" : True,
@@ -217,15 +220,17 @@ def parse_primary(code, lexer):
     elif lexer.token in VALKEYWORD:
         code.append(RValue(VALKEYWORD[lexer.token]))
         lexer.next_token()
-    elif lexer.token == 'if':
+    elif lexer.token in STATKEYWORD:
         parse_statement(code, lexer)
     else:
         lexer.error("Expected primary, but got " + repr(lexer.token))
 
-# statement = if_statement
+# statement = if_statement | while_statement
 def parse_statement(code, lexer):
     if lexer.token == "if":
         parse_if_statement(code, lexer)
+    elif lexer.token == "while":
+        parse_while_statement(code, lexer)
     else:
         lexer.error("expected statement, but got " + repr(lexer.token))
 
@@ -246,6 +251,21 @@ def parse_if_statement(code, lexer):
     else:
         code.append(LValue(None))
     to_end.target = len(code)
+    lexer.expects("end")
+
+# while_statement = "while" expr "do" exprlist "end"
+def parse_while_statement(code, lexer):
+    lexer.expects("while")
+    code.append(LValue(None))
+    start_loop = len(code)
+    parse_expr(code, lexer)
+    lexer.expects("do")
+    to_exit = OnFalseJump(0)
+    code.append(to_exit)
+    code.append("DROP")
+    parse_exprlist(code, lexer)
+    code.append(Jump(start_loop))
+    to_exit.target = len(code)
     lexer.expects("end")
 
 # args = '(' [expr {',' expr}] ')'
