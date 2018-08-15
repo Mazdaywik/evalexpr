@@ -36,7 +36,7 @@ class SyntaxError(Exception):
 class Lexer:
     OPS = ['+', '-', '*', '/', '(', ')', '=', ';', ',', '<', '>']
     OPS2 = ['<=', '>=', '==', '!=']
-    KEYWORDS = ["NONE", "TRUE", "FALSE"]
+    KEYWORDS = ["NONE", "TRUE", "FALSE", "if", "then", "else", "end"]
 
     def __init__(self, filename):
         fin = open(filename, encoding="UTF-8")
@@ -173,7 +173,7 @@ def parse_term(code, lexer):
 
 # factor = primary {args} | NUMBER | '(' exprlist ')'
 def parse_factor(code, lexer):
-    if type(lexer.token) == ID or lexer.token in VALKEYWORD:
+    if start_primary(lexer.token):
         parse_primary(code, lexer)
         while lexer.token == '(':
             parse_args(code, lexer)
@@ -188,13 +188,21 @@ def parse_factor(code, lexer):
         lexer.error("Expected number, varname or '(', but got "
                     + repr(lexer.token))
 
+def start_primary(token):
+    return (type(token) == ID
+            or token in VALKEYWORD
+            or token in STATKEYWORD)
+
+STATKEYWORD = ['if']
+
 VALKEYWORD = {
     "TRUE" : True,
     "FALSE" : False,
     "NONE" : None,
 }
 
-# primary = ID ['=' expr] | TRUE | FALSE | NONE
+# primary = ID ['=' expr] | valkeyword | statement
+# valkeyword = TRUE | FALSE | NONE
 def parse_primary(code, lexer):
     if type(lexer.token) == ID:
         varname = lexer.token.name
@@ -209,8 +217,36 @@ def parse_primary(code, lexer):
     elif lexer.token in VALKEYWORD:
         code.append(RValue(VALKEYWORD[lexer.token]))
         lexer.next_token()
+    elif lexer.token == 'if':
+        parse_statement(code, lexer)
     else:
-        lexer.error("Expected varname, but got " + repr(lexer.token))
+        lexer.error("Expected primary, but got " + repr(lexer.token))
+
+# statement = if_statement
+def parse_statement(code, lexer):
+    if lexer.token == "if":
+        parse_if_statement(code, lexer)
+    else:
+        lexer.error("expected statement, but got " + repr(lexer.token))
+
+# if_statement = "if" expr "then" exprlist [ "else" exprlist ] "end"
+def parse_if_statement(code, lexer):
+    lexer.expects("if")
+    parse_expr(code, lexer)
+    lexer.expects("then")
+    to_else = OnFalseJump(0)
+    code.append(to_else)
+    parse_exprlist(code, lexer)
+    to_end = Jump(0)
+    code.append(to_end)
+    to_else.target = len(code)
+    if lexer.token == "else":
+        lexer.next_token()
+        parse_exprlist(code, lexer)
+    else:
+        code.append(LValue(None))
+    to_end.target = len(code)
+    lexer.expects("end")
 
 # args = '(' [expr {',' expr}] ')'
 def parse_args(code, lexer):
@@ -239,6 +275,18 @@ class RValue:
         self.val = val
     def __repr__(self):
         return "RValue(" + repr(self.val) + ")"
+
+class OnFalseJump:
+    def __init__(self, target):
+        self.target = target
+    def __repr__(self):
+        return "OnFalseJump(" + repr(self.target) + ")"
+
+class Jump:
+    def __init__(self, target):
+        self.target = target
+    def __repr__(self):
+        return "Jump(" + repr(self.target) + ")"
 
 BINARY = {
     '+' : lambda x, y : x + y,
@@ -287,6 +335,13 @@ def evaluate(code):
             stack.pop()
         elif cur == "[]":
             stack.append([])
+        elif type(cur) == OnFalseJump:
+            if not stack.pop():
+                pc = cur.target
+                continue
+        elif type(cur) == Jump:
+            pc = cur.target
+            continue
         else:
             raise Exception("Bad instruction '{cur}'".format(**locals()))
         pc += 1
