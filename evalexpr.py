@@ -367,5 +367,5 @@ def evaluate(code):
         pc += 1
 
 if __name__ == "__main__":
-    #main(sys.argv)
-    main(["evalexpr.py", "example.txt"])
+    main(sys.argv)
+    #main(["evalexpr.py", "example.txt"])
